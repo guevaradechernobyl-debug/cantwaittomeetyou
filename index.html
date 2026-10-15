@@ -1,121 +1,121 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pose Booth</title>
+<title>Core Memory Booth</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
-:root{--bg:#fff0f6;--fg:#2b1b24;--card:#fff;--ac:#e64980;--mut:#8a6a78}
-@media (prefers-color-scheme:dark){:root{--bg:#1d1217;--fg:#fbeaf1;--card:#2a1b22;--ac:#ff7aa8;--mut:#b99aa8}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}
-main{max-width:520px;margin:0 auto;padding:18px 14px 40px}h1{margin:0 0 4px;font-size:1.5rem}
-.card{background:var(--card);border-radius:16px;padding:14px;margin:12px 0;box-shadow:0 1px 6px #0002}
-button{background:var(--ac);color:#fff;border:0;border-radius:12px;padding:14px;font-size:1rem;font-weight:700;width:100%;cursor:pointer}
-button.g{background:none;color:var(--fg);border:1px solid var(--mut);margin-top:8px}
-.stage{position:relative;aspect-ratio:3/4;background:#000;border-radius:14px;overflow:hidden}
-canvas,video.r{width:100%;height:100%;display:block}
-#cam{position:absolute;width:1px;height:1px;opacity:0}
-.hud{position:absolute;left:0;right:0;bottom:0;padding:12px;color:#fff;text-align:center;font-weight:700;background:linear-gradient(#0000,#000b);text-shadow:0 1px 3px #000}
-.bar{height:8px;background:#fff4;border-radius:4px;margin-top:8px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:#ff8fb8}
-.hide{display:none!important}small{color:var(--mut)}
+:root{--bg:#14121a;--fg:#f3eefc;--card:#211d2c;--ac:#a78bfa;--ok:#8fe3b0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px system-ui,sans-serif;text-align:center}
+main{max-width:680px;margin:0 auto;padding:14px}h1{margin:6px 0 0;font-size:1.5rem}
+#pose{margin:6px 0 10px;font-size:1.05rem}
+.stage{position:relative;background:#000;border-radius:14px;overflow:hidden}
+canvas{width:100%;display:block}
+button{background:var(--ac);color:#111;border:0;border-radius:12px;padding:14px 22px;font-size:1rem;font-weight:700;margin:6px;cursor:pointer}
+button:disabled{opacity:.5}
+.bar{height:10px;background:#fff2;border-radius:5px;overflow:hidden;margin:10px 0}.bar i{display:block;height:100%;width:0;background:var(--ac)}
+label{display:block;margin:8px;font-size:.9rem;color:#cfc7e6}
+#st{color:var(--ok);min-height:1.4em}.hide{display:none!important}
+#hot{position:fixed;right:0;bottom:0;width:36px;height:36px;opacity:0}
+.modal{position:fixed;inset:0;background:#000c;display:flex;align-items:center;justify-content:center;z-index:9}
+.box{background:var(--card);border-radius:16px;padding:18px;max-width:760px;width:92%;max-height:90vh;overflow:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:10px}.grid img{width:100%;border-radius:8px}
+input{padding:10px;border-radius:8px;border:1px solid #555;background:#111;color:#fff;width:70%}
 </style></head><body><main>
-<h1>🎀 Pose Booth</h1><small>Do each pose. Photos snap on their own, then get cut into a meme video.</small>
-<div id="home" class="card">
-<button id="start">Start camera</button>
-<button class="g" id="songb">Add song (optional audio file)</button><input id="songf" type="file" accept="audio/*" class="hide">
-<p><small id="msg">Camera needs HTTPS (or localhost). The pose model loads on first start.</small></p></div>
-<div id="cap" class="card hide"><div class="stage"><video id="cam" playsinline muted></video><canvas id="c" width="540" height="720"></canvas>
-<div class="hud"><div id="t"></div><div class="bar"><i id="f"></i></div></div></div></div>
-<div id="out" class="card hide"><b id="ost">Making your meme…</b><canvas id="cv" width="540" height="720" class="hide"></canvas>
-<video id="res" class="r hide" controls playsinline style="border-radius:12px;margin-top:8px"></video>
-<a id="dl" download="pose-meme.webm"><button class="hide" id="dlb" style="margin-top:10px">⬇ Download video</button></a>
-<button class="g hide" id="again">Do it again</button><small id="sv"></small></div>
+<h1 id="ttl">Core Memory Booth</h1><div id="pose">Starting camera…</div>
+<div class="stage"><video id="v" playsinline muted class="hide"></video><canvas id="c" width="640" height="480"></canvas></div>
+<div class="bar hide" id="bar"><i id="fill"></i></div><div id="st"></div>
+<label id="consentRow"><input type="checkbox" id="consent" style="width:auto"> I agree my meme may be saved to the creator's private gallery</label>
+<div><button id="cap">📸 Capture</button><button id="qr" class="hide">Get QR Code</button><button id="dl" class="hide">Download</button><button id="next" class="hide">Next Victim</button></div>
+<div id="hot" title=""></div>
 </main>
 <script type="module">
-/* ===== OWNER CONFIG (optional) =====
-   Private cloud save via Supabase Storage. Create a PRIVATE bucket, add an INSERT-only policy for the anon role
-   (no SELECT policy), and only you can see files in your Supabase dashboard. Leave blank to skip cloud save. */
-const CLOUD={url:"",anonKey:"",bucket:"videos"};
-const SONG_URL=""; // optional: URL of your own audio file hosted next to this page, e.g. "song.mp3"
+/* ===== CONFIG (Supabase Storage) =====
+   PRIVATE bucket: anon INSERT only, no SELECT  -> guests can add, only you can read.
+   SHARE bucket (optional, PUBLIC): anon INSERT only -> used only when a guest taps "Get QR Code".
+   Music files: put piano.mp3, anime.mp3, bass.mp3 in ./assets/ on your site. */
+const CFG={url:"",anon:"",bucket:"memes",shareBucket:"share"};
 
-import {PoseLandmarker,FilesetResolver} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
-const $=i=>document.getElementById(i);
-const ang=L=>Math.abs(Math.atan2(L[5].y-L[2].y,L[5].x-L[2].x)*57.3);
-const POSES=[
- {t:"Hands up beside your cheeks",ico:"🖐",ok:(L,s)=>both(L,w=>Math.abs(w.x-L[0].x)>1.1*s&&w.y<L[11].y&&w.y>L[0].y-1.5*s)},
- {t:"Move a fist to your mouth",ico:"👊",ok:(L,s)=>[L[15],L[16]].some(w=>w.v>.4&&dist(w,mid(L[9],L[10]))<.9*s)},
- {t:"Both fists under your chin",ico:"✊",ok:(L,s)=>{const c={x:L[0].x,y:L[9].y+.9*s};return both(L,w=>dist(w,c)<1.3*s)&&dist(L[15],L[16])<2.4*s}},
- {t:"Flat hands out at your shoulders",ico:"🙌",ok:(L,s)=>both(L,w=>w.y>L[9].y&&w.y<L[11].y+1.2*s&&Math.abs(w.x-L[0].x)>1.3*s)},
- {t:"Claws up beside your head",ico:"🐱",ok:(L,s)=>both(L,w=>w.y<L[0].y&&Math.abs(w.x-L[0].x)>1.0*s)},
- {t:"Tilt your head, hand on your cheek",ico:"😊",ok:(L,s)=>(ang(L)>10&&[L[15],L[16]].some(w=>w.v>.4&&(dist(w,L[7])<1.1*s||dist(w,L[8])<1.1*s)))}];
-const CAPS=["me when","POV:","nobody:","it's time"];
-const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),mid=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
-const both=(L,f)=>[L[15],L[16]].every(w=>w.v>.4&&f(w));
-let pl,stream,shots=[],idx=0,hold=0,song=null,songUrl=SONG_URL,lastL=null;
-$("songb").onclick=()=>$("songf").click();$("songf").onchange=e=>{const f=e.target.files[0];if(f){songUrl=URL.createObjectURL(f);$("songb").textContent="Song added ✓"}};
+import {HandLandmarker,FaceDetector,FilesetResolver} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+const $=i=>document.getElementById(i),cv=$("c"),x=cv.getContext("2d"),v=$("v");
+const W=640,H=480;let hand,face,state=1,info={hands:[],fy:null},snapCanvas=null,final=null,audio=null,scn,lastT=0;
 
-$("start").onclick=async()=>{
- $("msg").textContent="Starting camera…";
- try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:960},height:{ideal:1280}}})}
- catch(e){$("msg").textContent="Camera error: "+(e.name||e)+". Open this page over HTTPS (or localhost) and allow camera access.";return}
- $("msg").textContent="Loading pose model…";
- try{const fs=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
-  pl=await PoseLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",delegate:"GPU"},runningMode:"VIDEO",numPoses:1})}
- catch(e){$("msg").textContent="Couldn't load the pose model (check your internet).";return}
- const v=$("cam");v.srcObject=stream;await v.play();
- $("home").classList.add("hide");$("cap").classList.remove("hide");shots=[];idx=0;hold=0;$("t").textContent=POSES[0].t;draw()};
+/* ---------- Meme editor ---------- */
+const vig=(c,s)=>{const d=c.getContext("2d"),im=d.getImageData(0,0,c.width,c.height),a=im.data;
+ for(let y=0;y<c.height;y++)for(let q=0;q<c.width;q++){const dx=(q-c.width/2)/(c.width/2),dy=(y-c.height/2)/(c.height/2),f=1-s*Math.max(0,Math.min(1,Math.hypot(dx,dy)-.3)),i=(y*c.width+q)*4;a[i]*=f;a[i+1]*=f;a[i+2]*=f}
+ d.putImageData(im,0,0)};
+const mk=(w,h)=>{const c=document.createElement("canvas");c.width=w;c.height=h;return c};
+const tint=(c,r,g,b)=>{const d=c.getContext("2d"),im=d.getImageData(0,0,c.width,c.height),a=im.data;for(let i=0;i<a.length;i+=4){a[i]*=r;a[i+1]*=g;a[i+2]*=b}d.putImageData(im,0,0)};
+const txt=(d,t,px,py,size,col,al="center",stroke)=>{d.font=`800 ${size}px Impact,Arial Black,sans-serif`;d.textAlign=al;if(stroke){d.lineWidth=stroke;d.strokeStyle="#000";d.strokeText(t,px,py)}d.fillStyle=col;d.fillText(t,px,py)};
+const EDIT={
+ core(src){const p=mk(W,H);p.getContext("2d").drawImage(src,0,0);tint(p,1.08,1,.88);vig(p,.35);
+  const c=mk(W+80,H+190),d=c.getContext("2d");d.fillStyle="#faf5eb";d.fillRect(0,0,c.width,c.height);d.drawImage(p,40,40);
+  txt(d,"CORE MEMORY UNLOCKED",c.width/2,H+105,36,"#5a3c28");txt(d,"this one's going in the vault",c.width/2,H+152,22,"#8c6e5a");return c},
+ villain(src){const c=mk(W,H),d=c.getContext("2d");d.drawImage(src,0,0);tint(c,1.35,.55,.55);vig(c,.8);
+  d.strokeStyle="rgba(255,255,255,.55)";for(let i=0;i<90;i++){const a=Math.random()*6.283,r1=W*(.45+Math.random()*.25);d.lineWidth=1+Math.random()*3;d.beginPath();d.moveTo(W/2+r1*Math.cos(a),H/2+r1*Math.sin(a));d.lineTo(W/2+W*Math.cos(a),H/2+W*Math.sin(a));d.stroke()}
+  d.fillStyle="#000";d.fillRect(0,H-110,W,110);txt(d,"VILLAIN ORIGIN STORY",W/2,H-60,44,"#ff2828");txt(d,"it all started with this look...",W/2,H-24,22,"#ddd");return c},
+ sitcom(src){const c=mk(W,H),d=c.getContext("2d");d.drawImage(src,0,0);const im=d.getImageData(0,0,W,H),a=im.data,o=new Uint8ClampedArray(a);
+  for(let y=0;y<H;y++)for(let q=0;q<W;q++){const i=(y*W+q)*4,rr=(y*W+Math.min(W-1,q+6))*4,bb=(y*W+Math.max(0,q-6))*4,k=y%3==0?.7:1,n=(Math.random()-.5)*20;
+   a[i]=(o[bb]+n)*k;a[i+1]=(o[i+1]+n)*k;a[i+2]=(o[rr+2]+n)*k}
+  d.putImageData(im,0,0);vig(c,.4);txt(d,"SEASON 1  •  EPISODE 1",20,40,28,"#ffff50","left");txt(d,"● REC",W-20,40,26,"#ff3c3c","right");txt(d,"STARRING: YOU",W/2,H-36,44,"#fff","center",6);return c}};
+const SCN=[
+ {name:"Core Memory Unlocked",pose:"Smile and hold BOTH hands up near your face",music:"assets/piano.mp3",edit:EDIT.core,ok:i=>i.hands.length==2},
+ {name:"Villain Origin Story",pose:"Raise ONE fist above your chin and glare",music:"assets/anime.mp3",edit:EDIT.villain,ok:i=>i.fy!=null&&i.hands.some(y=>y<i.fy+.25)},
+ {name:"90s Sitcom Main Character",pose:"Show ONE hand and do your best jazz hands",music:"assets/bass.mp3",edit:EDIT.sitcom,ok:i=>i.hands.length>=1}];
 
-const cx=$("c").getContext("2d");let lastT=-1,matchLock=false;
-function fx(x,L,W,H,tm){
- x.fillStyle="rgba(255,175,210,.3)";x.fillRect(0,0,W,H);
- x.textAlign="center";x.globalAlpha=.5;x.font="240px serif";
- [[.2,.25,0],[.78,.2,1],[.7,.75,2]].forEach(([px,py,i])=>x.fillText("💗",px*W,py*H+Math.sin(tm/600+i*2)*14));x.globalAlpha=1;
- if(!L)return;const P=p=>({x:(1-p.x)*W,y:p.y*H}),n=P(L[0]),e1=P(L[2]),e2=P(L[5]),s=dist(e1,e2)*2.2;
- if(idx===0){x.fillStyle="rgba(255,80,110,.75)";for(const i of[15,16]){const w=P(L[i]);x.beginPath();x.arc(w.x,w.y,s*.55,0,7);x.fill();x.fillStyle="#fff8";x.beginPath();x.arc(w.x,w.y,s*.15,0,7);x.fill();x.fillStyle="rgba(255,80,110,.75)"}}
- const ear=(dx,dir)=>{x.fillStyle="#ff8fc0";x.beginPath();x.moveTo(n.x+dx-dir*s*.35,n.y-s*1.55);x.lineTo(n.x+dx+dir*s*.15,n.y-s*2.15);x.lineTo(n.x+dx+dir*s*.45,n.y-s*1.45);x.fill()};
- ear(-s*.45,1);ear(s*.45,-1);
- x.strokeStyle="#fff";x.lineWidth=Math.max(3,s*.05);x.lineCap="round";
- for(const e of[e1,e2])for(let k=-1;k<=1;k++){x.beginPath();x.moveTo(e.x+k*s*.07-s*.03,e.y+s*.55);x.lineTo(e.x+k*s*.07+s*.05,e.y+s*.38);x.stroke()}}
+/* ---------- Cloud ---------- */
+const up=async(blob,bucket)=>{if(!CFG.url||!CFG.anon)return null;const n=`${Date.now()}_${Math.random().toString(36).slice(2,8)}.jpg`;
+ try{const r=await fetch(`${CFG.url}/storage/v1/object/${bucket}/${n}`,{method:"POST",headers:{apikey:CFG.anon,Authorization:"Bearer "+CFG.anon,"Content-Type":"image/jpeg"},body:blob});return r.ok?n:null}catch(e){return null}};
+const toBlob=c=>new Promise(r=>c.toBlob(r,"image/jpeg",.92));
 
-function draw(){
- if(!stream)return;const v=$("cam"),W=540,H=720;
- const vr=v.videoWidth/v.videoHeight,tr=W/H;let sw=v.videoWidth,sh=v.videoHeight;if(vr>tr)sw=sh*tr;else sh=sw/tr;
- cx.save();cx.translate(W,0);cx.scale(-1,1);cx.drawImage(v,(v.videoWidth-sw)/2,(v.videoHeight-sh)/2,sw,sh,0,0,W,H);cx.restore();
- const now=performance.now();let ok=false;
- if(v.currentTime!==lastT){lastT=v.currentTime;const r=pl.detectForVideo(v,now);const l=r.landmarks&&r.landmarks[0];
-  if(l){const L=l.map((p,i)=>({x:p.x,y:p.y,v:p.visibility??1}));const s=dist(L[7],L[8]);lastL=l;if(s>.04)ok=POSES[idx].ok(L,s)}else lastL=null}
- fx(cx,lastL,W,H,now);
- const card=(px,ic)=>{cx.fillStyle="rgba(40,75,55,.88)";cx.beginPath();cx.roundRect(px-38,H*.33,76,104,10);cx.fill();cx.strokeStyle="#8fe3b0";cx.lineWidth=2;cx.stroke();cx.font="40px serif";cx.fillStyle="#fff";cx.fillText(ic,px,H*.33+58);cx.fillStyle="#8fe3b0";cx.fillRect(px-24,H*.33+80,48,4);cx.fillRect(px-16,H*.33+90,32,4)};
- card(46,POSES[idx].ico);card(W-46,"🙂");
- if(v.currentTime===lastT||true){hold=ok?Math.min(hold+1,12):Math.max(hold-1,0)}
- $("f").style.width=hold/12*100+"%";
- if(hold>=12&&!matchLock){matchLock=true;snap();return}
- requestAnimationFrame(draw)}
+/* ---------- Flow ---------- */
+async function init(){
+ try{const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:1280,height:960}});v.srcObject=s;await v.play()}
+ catch(e){$("pose").textContent="Camera error: "+(e.name||e)+" — needs HTTPS and camera permission.";return}
+ const fs=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+ hand=await HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"},runningMode:"VIDEO",numHands:2});
+ face=await FaceDetector.createFromOptions(fs,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite"},runningMode:"VIDEO"});
+ reset();loop()}
+function reset(){if(audio){audio.pause();audio=null}scn=SCN[Math.floor(Math.random()*SCN.length)];state=1;final=null;
+ $("ttl").textContent=scn.name;$("pose").textContent="👉 "+scn.pose;$("st").textContent="";
+ ["qr","dl","next"].forEach(i=>$(i).classList.add("hide"));$("cap").classList.remove("hide");$("consentRow").classList.remove("hide")}
+function frame(){const vw=v.videoWidth,vh=v.videoHeight,tr=W/H;let sw=vw,sh=vh;if(vw/vh>tr)sw=vh*tr;else sh=vw/tr;
+ x.save();x.translate(W,0);x.scale(-1,1);x.drawImage(v,(vw-sw)/2,(vh-sh)/2,sw,sh,0,0,W,H);x.restore()}
+function loop(){
+ if(state===1){frame();const t=performance.now();
+  if(t!==lastT&&v.readyState>=2){lastT=t;const h=hand.detectForVideo(v,t),f=face.detectForVideo(v,t);
+   info={hands:h.landmarks.map(l=>l[0].y),fy:f.detections.length?(f.detections[0].boundingBox.originY+f.detections[0].boundingBox.height/2)/v.videoHeight:null};
+   x.fillStyle="#fff";h.landmarks.forEach(l=>l.forEach(p=>{x.beginPath();x.arc((1-p.x)*W,p.y*H,3,0,7);x.fill()}))}
+  const g=scn.ok(info);txt(x,g?"POSE OK":"match the pose...",12,36,28,g?"#50ff78":"#ff5050","left",4)}
+ requestAnimationFrame(loop)}
+$("cap").onclick=()=>{state=2;$("cap").classList.add("hide");$("consentRow").classList.add("hide");$("bar").classList.remove("hide");
+ const t0=performance.now(),msg=["Analyzing Aura...","Scanning vibes...","Rendering destiny..."];
+ (function a(){const p=Math.min((performance.now()-t0)/3000,1);$("fill").style.width=p*100+"%";$("st").textContent=msg[Math.min(2,Math.floor(p*3))];
+  if(p<1)return setTimeout(a,50);reveal()})()};
+async function reveal(){
+ snapCanvas=mk(W,H);snapCanvas.getContext("2d").drawImage(cv,0,0); // raw mirrored frame (no overlays: captured before state change draws)
+ state=3;$("bar").classList.add("hide");final=scn.edit(snapCanvas);
+ cv.width=final.width;cv.height=final.height;x.drawImage(final,0,0);
+ audio=new Audio(scn.music);audio.loop=true;audio.play().catch(()=>{});
+ $("st").textContent="";
+ if($("consent").checked){const b=await toBlob(final),n=await up(b,CFG.bucket);if(n)$("st").textContent="☁ Saved to creator gallery"}
+ ["qr","dl","next"].forEach(i=>$(i).classList.remove("hide"))}
+$("next").onclick=()=>{cv.width=W;cv.height=H;reset()};
+$("dl").onclick=()=>{const a=document.createElement("a");a.href=final.toDataURL("image/jpeg",.92);a.download="my-meme.jpg";a.click()};
+$("qr").onclick=async()=>{const m=document.createElement("div");m.className="modal";m.innerHTML='<div class="box"><b>Scan to open your meme</b><div id="q" style="display:inline-block;background:#fff;padding:12px;margin:12px"></div><p id="qm"></p><button id="x">Close</button></div>';document.body.appendChild(m);
+ m.querySelector("#x").onclick=()=>m.remove();
+ const n=await up(await toBlob(final),CFG.shareBucket);
+ if(n){new QRCode(m.querySelector("#q"),`${CFG.url}/storage/v1/object/public/${CFG.shareBucket}/${n}`);m.querySelector("#qm").textContent="This makes a public link to your meme."}
+ else m.querySelector("#qm").textContent="Sharing isn't set up — use Download instead."};
 
-async function snap(){
- const c=document.createElement("canvas");c.width=540;c.height=720;c.getContext("2d").drawImage($("c"),0,0);shots.push(c);
- cx.fillStyle="#fff";cx.fillRect(0,0,540,720);idx++;hold=0;
- if(idx>=POSES.length){stream.getTracks().forEach(t=>t.stop());stream=null;pl.close();setTimeout(make,500);return}
- $("t").textContent="Nice! Next…";await new Promise(r=>setTimeout(r,1300));$("t").textContent=POSES[idx].t;matchLock=false;draw()}
-
-function meme(x,t,i){x.font="900 52px Impact,Arial Black,sans-serif";x.textAlign="center";x.lineWidth=8;x.strokeStyle="#000";x.fillStyle="#fff";const y=i%2?690:90;x.strokeText(t.toUpperCase(),270,y);x.fillText(t.toUpperCase(),270,y)}
-async function make(){
- $("cap").classList.add("hide");$("out").classList.remove("hide");$("cv").classList.remove("hide");
- const cv=$("cv"),x=cv.getContext("2d"),AC=new AudioContext(),dest=AC.createMediaStreamDestination();let au=null;
- if(songUrl){try{au=new Audio(songUrl);au.crossOrigin="anonymous";const s=AC.createMediaElementSource(au);s.connect(dest);s.connect(AC.destination)}catch(e){au=null}}
- const out=new MediaStream([...cv.captureStream(30).getVideoTracks(),...dest.stream.getAudioTracks()]);
- const mt=["video/webm;codecs=vp9,opus","video/webm","video/mp4"].find(t=>MediaRecorder.isTypeSupported(t)),rec=new MediaRecorder(out,{mimeType:mt,videoBitsPerSecond:3e6}),ch=[];
- rec.ondataavailable=e=>ch.push(e.data);const done=new Promise(r=>rec.onstop=r);
- const per=1100,N=shots.length,total=per*N+1800;rec.start();if(au)au.play().catch(()=>{});const t0=performance.now();
- await new Promise(res=>{(function fr(){const t=performance.now()-t0;if(t>=total){res();return}
-  x.fillStyle="#000";x.fillRect(0,0,540,720);
-  if(t<per*N){const i=Math.floor(t/per),lt=t%per,b=(lt%550)/550,z=1+.18*(1-b);
-   x.save();x.translate(270+(Math.random()-.5)*10*(1-b),360+(Math.random()-.5)*10*(1-b));x.rotate((i%2?1:-1)*.03*(1-b));x.scale(z,z);x.drawImage(shots[i],-270,-360);x.restore();
-   if(lt<90){x.fillStyle="#fff8";x.fillRect(0,0,540,720)}meme(x,CAPS[i%CAPS.length],i)}
-  else{const lt=t-per*N;x.fillStyle="#2b1b24";x.fillRect(0,0,540,720);shots.forEach((im,i)=>{if(lt>i*220)x.drawImage(im,(i%2)*270,Math.floor(i/2)*360,270,360)});
-   const s=1+.06*Math.sin(lt/90);x.save();x.translate(270,360);x.scale(s,s);x.font="900 54px Impact,Arial Black,sans-serif";x.textAlign="center";x.lineWidth=8;x.strokeStyle="#000";x.fillStyle="#fff";x.strokeText("SEE YOU SOON!",0,0);x.fillText("SEE YOU SOON!",0,0);x.restore()}
-  requestAnimationFrame(fr)})()});
- rec.stop();if(au)au.pause();await done;
- const blob=new Blob(ch,{type:mt.split(";")[0]}),u=URL.createObjectURL(blob);
- cv.classList.add("hide");$("res").src=u;$("res").classList.remove("hide");$("dl").href=u;$("dl").download="pose-meme."+(mt.includes("mp4")?"mp4":"webm");
- $("ost").textContent="Your meme is ready!";$("dlb").classList.remove("hide");$("again").classList.remove("hide");$("again").onclick=()=>location.reload();
- if(CLOUD.url&&CLOUD.anonKey){$("sv").textContent="Saving…";try{const r=await fetch(`${CLOUD.url}/storage/v1/object/${CLOUD.bucket}/${Date.now()}.${$("dl").download.split(".")[1]}`,{method:"POST",headers:{apikey:CLOUD.anonKey,Authorization:"Bearer "+CLOUD.anonKey,"Content-Type":blob.type},body:blob});$("sv").textContent=r.ok?"Saved ✓":"Cloud save failed."}catch(e){$("sv").textContent="Cloud save failed."}}}
+/* ---------- Admin: Ctrl+Shift+A or tap hidden bottom-right corner ---------- */
+const admin=()=>{const m=document.createElement("div");m.className="modal";m.innerHTML='<div class="box"><b>Admin</b><br><input id="k" type="password" placeholder="service_role key"> <button id="go">Open</button> <button id="cl">Close</button><div id="g" class="grid"></div></div>';document.body.appendChild(m);
+ m.querySelector("#cl").onclick=()=>m.remove();
+ m.querySelector("#go").onclick=async()=>{const k=m.querySelector("#k").value,g=m.querySelector("#g"),H={apikey:k,Authorization:"Bearer "+k};g.textContent="Loading…";
+  try{const r=await fetch(`${CFG.url}/storage/v1/object/list/${CFG.bucket}`,{method:"POST",headers:{...H,"Content-Type":"application/json"},body:JSON.stringify({prefix:"",limit:200,sortBy:{column:"created_at",order:"desc"}})});
+   if(!r.ok)throw 0;const L=(await r.json()).filter(f=>/\.jpg$/.test(f.name));g.textContent=L.length?"":"Empty";
+   for(const f of L){const b=await (await fetch(`${CFG.url}/storage/v1/object/${CFG.bucket}/${f.name}`,{headers:H})).blob(),i=new Image();i.src=URL.createObjectURL(b);g.appendChild(i)}}
+  catch(e){g.textContent="Access denied or network error."}}};
+addEventListener("keydown",e=>{if(e.ctrlKey&&e.shiftKey&&e.key.toLowerCase()==="a"){e.preventDefault();admin()}});
+$("hot").onclick=admin;
+init();
 </script></body></html>
